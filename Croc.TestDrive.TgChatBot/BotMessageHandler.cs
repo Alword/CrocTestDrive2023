@@ -52,6 +52,7 @@ namespace Croc.TestDrive.TgChatBot
 				if (callback.Data == nameof(IContext.Reset))
 				{
 					await callbackContext.Reset();
+					await telegramBot.SendTextMessageAsync(callbackChat, "О чём поговорим?");
 					await telegramBot.AnswerCallbackQueryAsync(callback.Id);
 					return;
 				}
@@ -66,6 +67,7 @@ namespace Croc.TestDrive.TgChatBot
 			var userId = from.Id;
 			var chatId = message.Chat.Id;
 			RunBackgound(telegramBot, messageText, chatId);
+			await telegramBot.SendTextMessageAsync(chatId, "Ответ подготавливается");
 			async void RunBackgound(ITelegramBotClient telegramBot, string messageText, long chatId)
 			{
 				try

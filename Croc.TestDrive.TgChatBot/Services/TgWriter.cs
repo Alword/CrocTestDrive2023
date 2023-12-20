@@ -6,7 +6,6 @@ namespace Croc.TestDrive.TgChatBot.Services
 {
 	internal class TgWriter : IContextListener
 	{
-		private const string _initMessage = "Поиск...";
 		private readonly long _chatId;
 		private readonly ITelegramBotClient _telegramBotClient;
 		private readonly StringBuilder _message = new StringBuilder();
@@ -19,52 +18,43 @@ namespace Croc.TestDrive.TgChatBot.Services
 			_telegramBotClient = telegramBotClient;
 		}
 
-		public static async Task<IContextListener> From(long chatId, ITelegramBotClient telegramBotClient)
+		public static Task<IContextListener> From(long chatId, ITelegramBotClient telegramBotClient)
 		{
-			var tg = new TgWriter(chatId, telegramBotClient);
-			return tg;
+			IContextListener tg = new TgWriter(chatId, telegramBotClient);
+			return Task.FromResult(tg);
 		}
 
-		public async Task Write(string? text, bool isFinish = false)
+		public async Task Write(string text)
 		{
-			if (text is null)
+			if (string.IsNullOrEmpty(text) || (_message.Length == 0 && string.IsNullOrWhiteSpace(text)))
 			{
-				await Write(_initMessage);
 				return;
 			}
 
-			if (_message.Length == _initMessage.Length && _message.ToString() == _initMessage) _message.Clear();
 			_message.Append(text);
 			if (DateTime.Now - _lastSent > _delay)
 			{
 				_lastSent = DateTime.Now;
-				await Write(isFinish);
+				await Send(false);
 			}
 		}
 
-		public async Task Flush(string? text = null)
+		public async Task Flush()
 		{
-			if (text is not null)
-			{
-				await Write(text, true);
-			}
-			else
-			{
-				await Write(true);
-			}
+			await Send(true);
 			_message.Clear();
 			_messageId = null;
 		}
 
-		private async Task Write(bool finish = false)
+		private async Task Send(bool finish = false)
 		{
-			InlineKeyboardMarkup streaming = new InlineKeyboardMarkup(new[]
+			InlineKeyboardMarkup streaming = new(new[]
 			{
 				new[] { InlineKeyboardButton.WithCallbackData("Остановить", nameof(IContext.Interrupt)) },
 			});
-			InlineKeyboardMarkup mainMenu = new InlineKeyboardMarkup(new[]
+			InlineKeyboardMarkup mainMenu = new(new[]
 			{
-				new[] { InlineKeyboardButton.WithCallbackData("Новый чат", nameof(IContext.Reset)) },
+				new[] { InlineKeyboardButton.WithCallbackData("Начать новую тему", nameof(IContext.Reset)) },
 			});
 
 			var replyMarkup = finish ? mainMenu : streaming;

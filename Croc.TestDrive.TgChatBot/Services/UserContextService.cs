@@ -2,69 +2,6 @@
 
 namespace Croc.TestDrive.TgChatBot.Services
 {
-	public interface IContextListener
-	{
-		public Task Write(string? text, bool isFinish = false);
-		public Task Flush(string? text = null);
-	}
-
-	public interface IContext
-	{
-		public Task Ask(string message);
-		public Task Interrupt();
-		public Task Reset();
-	}
-
-	public class LamaContext : IContext
-	{
-		private static readonly string _model = "dolphin-mixtral:latest";
-		private readonly IContextListener _listener;
-		private readonly OllamaApiClient _client;
-		private ConversationContext? _context;
-		private CancellationTokenSource _tokenSource = new CancellationTokenSource();
-		public LamaContext(
-			IContextListener listener,
-			OllamaApiClient client)
-		{
-			_listener = listener;
-			_client = client;
-		}
-		public async Task Ask(string message)
-		{
-			_tokenSource.Cancel();
-			_tokenSource = new CancellationTokenSource();
-			try
-			{
-				await _listener.Write(null);
-				_context = await _client.StreamCompletion(
-					$"[Отвечай на русском] {message}",
-					_model,
-					_context, stream => _listener.Write(stream.Response),
-					_tokenSource.Token
-				);
-			}
-			finally
-			{
-				await _listener.Flush();
-			}
-		}
-
-		public async Task Interrupt()
-		{
-			_tokenSource.Cancel();
-		}
-
-		public Task Reset()
-		{
-			_context = null;
-			return _listener.Flush("Создан новый чат");
-		}
-	}
-
-	public interface IUserContext
-	{
-		public Task<IContext> GetContext(long userId, ITelegramBotClient telegramBotClient);
-	}
 
 	internal class UserContextService : IUserContext
 	{
