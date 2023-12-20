@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 // https://github.com/jmorganca/ollama/blob/main/docs/api.md
@@ -161,12 +162,27 @@ public class OllamaApiClient
 		}
 	}
 
-	public async Task<ConversationContext> StreamCompletion(string prompt, string model, ConversationContext context, Action<GenerateCompletionResponseStream> streamer)
+	public async Task<ConversationContext> StreamCompletion(
+		string prompt,
+		string model,
+		ConversationContext context,
+		Action<GenerateCompletionResponseStream> streamer,
+		CancellationToken cancellationToken)
 	{
-		return await StreamCompletion(prompt, model, context, new ActionResponseStreamer<GenerateCompletionResponseStream>(streamer));
+		return await StreamCompletion(
+			prompt,
+			model,
+			context,
+			new ActionResponseStreamer<GenerateCompletionResponseStream>(streamer),
+			cancellationToken);
 	}
 
-	public async Task<ConversationContext> StreamCompletion(string prompt, string model, ConversationContext context, IResponseStreamer<GenerateCompletionResponseStream> streamer)
+	public async Task<ConversationContext> StreamCompletion(
+		string prompt,
+		string model,
+		ConversationContext context,
+		IResponseStreamer<GenerateCompletionResponseStream> streamer,
+		CancellationToken token)
 	{
 		var generateRequest = new GenerateCompletionRequest
 		{
@@ -176,10 +192,10 @@ public class OllamaApiClient
 			Context = context?.Context ?? Array.Empty<long>()
 		};
 
-		return await GenerateCompletion(generateRequest, streamer);
+		return await GenerateCompletion(generateRequest, streamer, token);
 	}
 
-	public async Task<ConversationContextWithResponse> GetCompletion(string prompt, string model, ConversationContext context)
+	public async Task<ConversationContextWithResponse> GetCompletion(string prompt, string model, ConversationContext context, CancellationToken token)
 	{
 		var generateRequest = new GenerateCompletionRequest
 		{
@@ -190,11 +206,18 @@ public class OllamaApiClient
 		};
 
 		var builder = new StringBuilder();
-		var result = await GenerateCompletion(generateRequest, new ActionResponseStreamer<GenerateCompletionResponseStream>(status => builder.Append(status.Response)));
+		var result = await GenerateCompletion(
+			generateRequest,
+			new ActionResponseStreamer<GenerateCompletionResponseStream>(status => builder.Append(status.Response)),
+			token
+		);
 		return new ConversationContextWithResponse(builder.ToString(), result.Context);
 	}
 
-	public async Task<ConversationContext> GenerateCompletion(GenerateCompletionRequest generateRequest, IResponseStreamer<GenerateCompletionResponseStream> streamer)
+	public async Task<ConversationContext> GenerateCompletion(
+		GenerateCompletionRequest generateRequest,
+		IResponseStreamer<GenerateCompletionResponseStream> streamer,
+		CancellationToken token)
 	{
 		var request = new HttpRequestMessage(HttpMethod.Post, "/api/generate")
 		{
@@ -203,18 +226,21 @@ public class OllamaApiClient
 
 		var completionOption = generateRequest.Stream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead;
 
-		using var response = await _client.SendAsync(request, completionOption);
+		using var response = await _client.SendAsync(request, completionOption, token);
 		response.EnsureSuccessStatusCode();
 
-		return await ProcessStreamedCompletionResponseAsync(response, streamer);
+		return await ProcessStreamedCompletionResponseAsync(response, streamer, token);
 	}
 
-	private static async Task<ConversationContext> ProcessStreamedCompletionResponseAsync(HttpResponseMessage response, IResponseStreamer<GenerateCompletionResponseStream> streamer)
+	private static async Task<ConversationContext> ProcessStreamedCompletionResponseAsync(
+		HttpResponseMessage response,
+		IResponseStreamer<GenerateCompletionResponseStream> streamer,
+		CancellationToken token)
 	{
-		using var stream = await response.Content.ReadAsStreamAsync();
+		using var stream = await response.Content.ReadAsStreamAsync(token);
 		using var reader = new StreamReader(stream);
 
-		while (!reader.EndOfStream)
+		while (!reader.EndOfStream && !token.IsCancellationRequested)
 		{
 			string line = await reader.ReadLineAsync();
 			var streamedResponse = JsonSerializer.Deserialize<GenerateCompletionResponseStream>(line);

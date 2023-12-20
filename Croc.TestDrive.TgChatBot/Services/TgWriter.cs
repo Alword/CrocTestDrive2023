@@ -22,24 +22,38 @@ namespace Croc.TestDrive.TgChatBot.Services
 		public static async Task<IContextListener> From(long chatId, ITelegramBotClient telegramBotClient)
 		{
 			var tg = new TgWriter(chatId, telegramBotClient);
-			await tg.Write(_initMessage);
 			return tg;
 		}
 
-		public async Task Write(string text)
+		public async Task Write(string? text, bool isFinish = false)
 		{
+			if (text is null)
+			{
+				await Write(_initMessage);
+				return;
+			}
+
 			if (_message.Length == _initMessage.Length && _message.ToString() == _initMessage) _message.Clear();
 			_message.Append(text);
 			if (DateTime.Now - _lastSent > _delay)
 			{
-				await Write();
+				_lastSent = DateTime.Now;
+				await Write(isFinish);
 			}
 		}
 
-		public async Task Flush()
+		public async Task Flush(string? text = null)
 		{
-			await Write(true);
+			if (text is not null)
+			{
+				await Write(text, true);
+			}
+			else
+			{
+				await Write(true);
+			}
 			_message.Clear();
+			_messageId = null;
 		}
 
 		private async Task Write(bool finish = false)
@@ -55,9 +69,13 @@ namespace Croc.TestDrive.TgChatBot.Services
 
 			var replyMarkup = finish ? mainMenu : streaming;
 
+			var text = _message.ToString();
+
+			if (string.IsNullOrWhiteSpace(text)) return;
+
 			if (_messageId.HasValue)
 			{
-				await _telegramBotClient.EditMessageTextAsync(_chatId, _messageId.Value, _message.ToString(), replyMarkup: replyMarkup);
+				await _telegramBotClient.EditMessageTextAsync(_chatId, _messageId.Value, text, replyMarkup: replyMarkup);
 
 				if (_message.Length > 2048)
 				{
@@ -68,7 +86,7 @@ namespace Croc.TestDrive.TgChatBot.Services
 			}
 			else
 			{
-				var msg = await _telegramBotClient.SendTextMessageAsync(_chatId, _message.ToString(), replyMarkup: replyMarkup);
+				var msg = await _telegramBotClient.SendTextMessageAsync(_chatId, text, replyMarkup: replyMarkup);
 				_messageId = msg.MessageId;
 			}
 		}

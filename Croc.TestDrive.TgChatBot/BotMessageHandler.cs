@@ -65,8 +65,22 @@ namespace Croc.TestDrive.TgChatBot
 			var firstName = from.FirstName ?? "Неизвестный";
 			var userId = from.Id;
 			var chatId = message.Chat.Id;
-			var context = await _userContext.GetContext(chatId, telegramBot);
-			await context.Ask(messageText);
+			RunBackgound(telegramBot, messageText, chatId);
+			async void RunBackgound(ITelegramBotClient telegramBot, string messageText, long chatId)
+			{
+				try
+				{
+					await Task.Run(async () =>
+					{
+						var context = await _userContext.GetContext(chatId, telegramBot);
+						await context.Ask(messageText);
+					});
+				}
+				catch
+				{
+
+				}
+			}
 		}
 	}
 }

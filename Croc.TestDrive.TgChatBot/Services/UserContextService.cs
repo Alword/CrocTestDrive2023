@@ -4,8 +4,8 @@ namespace Croc.TestDrive.TgChatBot.Services
 {
 	public interface IContextListener
 	{
-		public Task Write(string text);
-		public Task Flush();
+		public Task Write(string? text, bool isFinish = false);
+		public Task Flush(string? text = null);
 	}
 
 	public interface IContext
@@ -13,7 +13,6 @@ namespace Croc.TestDrive.TgChatBot.Services
 		public Task Ask(string message);
 		public Task Interrupt();
 		public Task Reset();
-		public Task SetListener(IContextListener listener);
 	}
 
 	public class LamaContext : IContext
@@ -22,6 +21,7 @@ namespace Croc.TestDrive.TgChatBot.Services
 		private readonly IContextListener _listener;
 		private readonly OllamaApiClient _client;
 		private ConversationContext? _context;
+		private CancellationTokenSource _tokenSource = new CancellationTokenSource();
 		public LamaContext(
 			IContextListener listener,
 			OllamaApiClient client)
@@ -31,9 +31,17 @@ namespace Croc.TestDrive.TgChatBot.Services
 		}
 		public async Task Ask(string message)
 		{
+			_tokenSource.Cancel();
+			_tokenSource = new CancellationTokenSource();
 			try
 			{
-				_context = await _client.StreamCompletion($"[Отвечай на русском] {message}", _model, _context, stream => _listener.Write(stream.Response));
+				await _listener.Write(null);
+				_context = await _client.StreamCompletion(
+					$"[Отвечай на русском] {message}",
+					_model,
+					_context, stream => _listener.Write(stream.Response),
+					_tokenSource.Token
+				);
 			}
 			finally
 			{
@@ -43,20 +51,13 @@ namespace Croc.TestDrive.TgChatBot.Services
 
 		public async Task Interrupt()
 		{
-			throw new NotImplementedException();
+			_tokenSource.Cancel();
 		}
 
 		public Task Reset()
 		{
 			_context = null;
-			_listener.Write("Диалог очищен");
-			_listener.Flush();
-			return Task.CompletedTask;
-		}
-
-		public Task SetListener(IContextListener listener)
-		{
-			throw new NotImplementedException();
+			return _listener.Flush("Создан новый чат");
 		}
 	}
 
@@ -81,6 +82,7 @@ namespace Croc.TestDrive.TgChatBot.Services
 			{
 				var writer = await TgWriter.From(chatId, telegramBotClient);
 				context = new LamaContext(writer, _ollama);
+				_context[chatId] = context;
 			}
 			return context;
 		}
