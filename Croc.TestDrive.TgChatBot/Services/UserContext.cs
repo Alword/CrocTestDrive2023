@@ -1,41 +1,49 @@
-﻿using LLama;
-using LLama.Common;
+﻿
+
+using Forge.OpenAI.Interfaces.Services;
+using Forge.OpenAI.Models.ChatCompletions;
 
 namespace Croc.TestDrive.TgChatBot.Services
 {
 	public class UserContext : IContext
 	{
+		private static readonly string _defaultModel = "guanaco-13b-uncensored.Q5_K_M.gguf";
 		private readonly IContextListener _listener;
-		private readonly LLamaWeights _lLamaWeights;
-		private readonly ModelParams _modelParams;
+		private readonly IOpenAIService _openAIService;
 		private CancellationTokenSource _tokenSource = new CancellationTokenSource();
-		private ChatSession? _chatSession;
-		public UserContext(IContextListener listener, LLamaWeights lLamaWeights, ModelParams modelParams)
+		private ChatCompletionRequest? _chat;
+		public UserContext(IContextListener listener, IOpenAIService openAIService)
 		{
 			_listener = listener;
-			_lLamaWeights = lLamaWeights;
-			_modelParams = modelParams;
+			_openAIService = openAIService;
 		}
 		public async Task Ask(string message)
 		{
-			_tokenSource.Cancel();
-			_tokenSource = new CancellationTokenSource();
-			if (_chatSession is null)
+
+			if (_chat is null)
 			{
-				_chatSession = CreateSession();
+				_chat = CreateSession(message);
 			}
+			else
+			{
+				_chat.Messages.Add(ChatMessage.CreateFromUser(message));
+			}
+
 			try
 			{
-				var inference = new InferenceParams() { Temperature = 0.6f, AntiPrompts = new List<string> { "User:", "Пользователь:" } };
-				await foreach (var text in _chatSession.ChatAsync(message, inference, _tokenSource.Token))
+				_tokenSource = new CancellationTokenSource();
+				await _listener.Init();
+
+				await foreach (var response in _openAIService.ChatCompletionService.GetStreamAsync(_chat, _tokenSource.Token))
 				{
-					await _listener.Write(text);
+					await _listener.Write(response.Result?.Choices[0].Delta.Content ?? string.Empty);
 				}
-				_chatSession.History.AddMessage(AuthorRole.Assistant, _listener.Response());
+				_chat.Messages.Add(ChatMessage.CreateFromAssistant(_listener.Response()));
 			}
 			finally
 			{
 				await _listener.Flush();
+				_tokenSource.Cancel();
 				GC.Collect();
 			}
 		}
@@ -48,27 +56,23 @@ namespace Croc.TestDrive.TgChatBot.Services
 
 		public Task Reset()
 		{
-			_chatSession = null;
+			_chat = null;
 			return Task.CompletedTask;
 		}
 
-		private ChatSession CreateSession()
+		private ChatCompletionRequest CreateSession(string message)
 		{
-			var context = _lLamaWeights.CreateContext(_modelParams);
-			var ex = new InteractiveExecutor(context);
-			var session = new ChatSession(ex);
-			session.WithOutputTransform(new LLamaTransforms.KeywordTextOutputStreamTransform(
-			new string[] { "User:", "Assistant:" },
-			redundancyLength: 8));
-			session.History.AddMessage(AuthorRole.System,
-				"Ты отвечаешь пользователю ТОЛЬКО НА русском языке с кокетливой интонацией. " +
-				"Ты всегда отвечаешь как ассистент и не придумываешь ничего за пользователя " +
-				"Ты не пишешь участников чата, а просто пишешь текст ответ" +
-				"Ты не пишешь роли");
-			session.History.AddMessage(AuthorRole.Assistant, "Привет, я Ms. Alword, чем могу помочь?");
-			session.History.AddMessage(AuthorRole.User, "Привет, рад встречи");
-			session.History.AddMessage(AuthorRole.Assistant, "Слушаю ваш вопрос");
-			return session;
+			var chat = new ChatCompletionRequest(
+					ChatMessage.CreateFromUser(message),
+					_defaultModel
+				)
+			{
+				MaxTokens = 4096,
+				Temperature = 0.1, // lower value means more precise answer
+				NumberOfChoicesPerMessage = 1,
+			};
+			chat.Messages.Add(ChatMessage.CreateFromSystem("Используй русский языке"));
+			return chat;
 		}
 	}
 }

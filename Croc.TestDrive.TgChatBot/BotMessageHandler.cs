@@ -66,7 +66,6 @@ namespace Croc.TestDrive.TgChatBot
 			var firstName = from.FirstName ?? "Неизвестный";
 			var userId = from.Id;
 			var chatId = message.Chat.Id;
-			await telegramBot.SendTextMessageAsync(chatId, "Ответ подготавливается");
 			RunBackgound(telegramBot, messageText, chatId);
 			void RunBackgound(ITelegramBotClient telegramBot, string messageText, long chatId)
 			{

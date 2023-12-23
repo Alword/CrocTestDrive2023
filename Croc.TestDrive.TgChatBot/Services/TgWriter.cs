@@ -11,7 +11,7 @@ namespace Croc.TestDrive.TgChatBot.Services
 		private readonly ITelegramBotClient _telegramBotClient;
 		private readonly StringBuilder _message = new StringBuilder();
 		private static DateTime _lastSent = DateTime.MinValue;
-		private static TimeSpan _delay = TimeSpan.FromSeconds(1);
+		private static TimeSpan _delay = TimeSpan.FromSeconds(1.5);
 		private Message? _msg = null;
 		private int _lastMessageSize = 0;
 		private TgWriter(long chatId, ITelegramBotClient telegramBotClient)
@@ -28,6 +28,7 @@ namespace Croc.TestDrive.TgChatBot.Services
 
 		public async Task Write(string text)
 		{
+			Console.WriteLine(text);
 			if (string.IsNullOrEmpty(text) || (_message.Length == 0 && string.IsNullOrWhiteSpace(text)))
 			{
 				return;
@@ -61,18 +62,14 @@ namespace Croc.TestDrive.TgChatBot.Services
 
 			var replyMarkup = finish ? mainMenu : streaming;
 
-			var text = _message.ToString();
+			var text = finish ? $"{_message}🧀" : _message.ToString();
 
 			if (string.IsNullOrWhiteSpace(text)) return;
 			_lastMessageSize = text.Length;
 
 			if (_msg is not null)
 			{
-				if (text.Trim() == _msg.Text)
-				{
-					if (finish) text += " 🧀";
-					else return;
-				}
+				if (text.Trim() == _msg.Text) return;
 				_msg = await _telegramBotClient.EditMessageTextAsync(_chatId, _msg.MessageId, text, replyMarkup: replyMarkup);
 
 				if (_message.Length > 2048)
@@ -89,5 +86,12 @@ namespace Croc.TestDrive.TgChatBot.Services
 		}
 
 		public string Response() => _message.ToString();
+
+		public async Task Init()
+		{
+			_message.AppendLine("Ответ подготавливается");
+			await Send(false);
+			_message.Clear();
+		}
 	}
 }

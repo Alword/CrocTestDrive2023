@@ -9,8 +9,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="LLamaSharp" Version="0.8.1" />
-		<PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.8.1" />
+		<PackageReference Include="Forge.OpenAI" Version="1.2.0" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
 		<PackageReference Include="Telegram.Bot" Version="19.0.0" />
 	</ItemGroup>
