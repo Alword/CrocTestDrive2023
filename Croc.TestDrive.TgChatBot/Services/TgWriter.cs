@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Telegram.Bot;
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 
 namespace Croc.TestDrive.TgChatBot.Services
@@ -11,7 +12,8 @@ namespace Croc.TestDrive.TgChatBot.Services
 		private readonly StringBuilder _message = new StringBuilder();
 		private static DateTime _lastSent = DateTime.MinValue;
 		private static TimeSpan _delay = TimeSpan.FromSeconds(1);
-		private int? _messageId = null;
+		private Message? _msg = null;
+		private int _lastMessageSize = 0;
 		private TgWriter(long chatId, ITelegramBotClient telegramBotClient)
 		{
 			_chatId = chatId;
@@ -43,7 +45,7 @@ namespace Croc.TestDrive.TgChatBot.Services
 		{
 			await Send(true);
 			_message.Clear();
-			_messageId = null;
+			_msg = null;
 		}
 
 		private async Task Send(bool finish = false)
@@ -62,23 +64,30 @@ namespace Croc.TestDrive.TgChatBot.Services
 			var text = _message.ToString();
 
 			if (string.IsNullOrWhiteSpace(text)) return;
+			_lastMessageSize = text.Length;
 
-			if (_messageId.HasValue)
+			if (_msg is not null)
 			{
-				await _telegramBotClient.EditMessageTextAsync(_chatId, _messageId.Value, text, replyMarkup: replyMarkup);
+				if (text.Trim() == _msg.Text)
+				{
+					if (finish) text += " 🧀";
+					else return;
+				}
+				_msg = await _telegramBotClient.EditMessageTextAsync(_chatId, _msg.MessageId, text, replyMarkup: replyMarkup);
 
 				if (_message.Length > 2048)
 				{
 					_message.Clear();
-					_messageId = null;
+					_msg = null;
 				}
 
 			}
 			else
 			{
-				var msg = await _telegramBotClient.SendTextMessageAsync(_chatId, text, replyMarkup: replyMarkup);
-				_messageId = msg.MessageId;
+				_msg = await _telegramBotClient.SendTextMessageAsync(_chatId, text, replyMarkup: replyMarkup);
 			}
 		}
+
+		public string Response() => _message.ToString();
 	}
 }

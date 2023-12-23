@@ -4,5 +4,6 @@
 	{
 		public Task Write(string text);
 		public Task Flush();
+		public string Response();
 	}
 }
